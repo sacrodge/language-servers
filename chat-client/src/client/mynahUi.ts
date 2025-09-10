@@ -180,6 +180,12 @@ export const handleChatPrompt = (
 ) => {
     let userPrompt = prompt.escapedPrompt
 
+    // Clear modified files for file-modifying commands
+    const fileModifyingCommands = ['/dev', '/transform', '/generate']
+    if (prompt.command && fileModifyingCommands.includes(prompt.command)) {
+        mynahUi.clearModifiedFiles(tabId)
+    }
+
     // Check if there's an ongoing request
     const isLoading = mynahUi.getTabData(tabId)?.getStore()?.loadingChat
 
@@ -808,6 +814,9 @@ export const createMynahUi = (
                 })
             }
         },
+        onModifiedFileClick: (tabId: string, filePath: string, eventId?: string) => {
+            messager.onFileClick({ tabId, filePath, messageId: undefined })
+        },
     }
 
     const mynahUiProps: MynahUIProps = {
@@ -953,6 +962,27 @@ export const createMynahUi = (
         const fileList = toMynahFileList(chatResult.fileList)
         const buttons = toMynahButtons(chatResult.buttons)
 
+        // Populate modified files tracker from fileList (check both root and header)
+        const modifiedFileList = chatResult.fileList || chatResult.header?.fileList
+        if (modifiedFileList?.filePaths) {
+            console.log('[LanguageServer] agenticAddChatResponse - populating modified files', {
+                tabId,
+                filePaths: modifiedFileList.filePaths,
+                isPartialResult,
+                location: chatResult.fileList ? 'root' : 'header',
+            })
+            modifiedFileList.filePaths.forEach(filePath => {
+                mynahUi.addModifiedFile(tabId, filePath)
+            })
+            mynahUi.setModifiedFilesWorkInProgress(tabId, isPartialResult)
+        } else {
+            console.log('[LanguageServer] agenticAddChatResponse - no fileList found', {
+                tabId,
+                hasRootFileList: !!chatResult.fileList,
+                hasHeaderFileList: !!chatResult.header?.fileList,
+            })
+        }
+
         if (chatResult.contextList !== undefined) {
             header = contextListToHeader(chatResult.contextList)
         }
@@ -967,6 +997,19 @@ export const createMynahUi = (
                 cancelButtonWhenLoading: true,
             })
             chatResult.additionalMessages.forEach(am => {
+                // Check for files in additional messages (check both root and header)
+                const amModifiedFileList = am.fileList || am.header?.fileList
+                if (amModifiedFileList?.filePaths) {
+                    console.log('[LanguageServer] additionalMessages - populating modified files', {
+                        tabId,
+                        filePaths: amModifiedFileList.filePaths,
+                        location: am.fileList ? 'root' : 'header',
+                    })
+                    amModifiedFileList.filePaths.forEach(filePath => {
+                        mynahUi.addModifiedFile(tabId, filePath)
+                    })
+                }
+
                 const chatItem: ChatItem = {
                     messageId: am.messageId,
                     type:
@@ -1076,6 +1119,27 @@ export const createMynahUi = (
     const legacyAddChatResponse = (chatResult: ChatResult, tabId: string, isPartialResult: boolean) => {
         const { type, summary, ...chatResultWithoutTypeSummary } = chatResult
         let header = undefined
+
+        // Also check for files in legacy mode (check both root and header)
+        const legacyModifiedFileList = chatResult.fileList || chatResult.header?.fileList
+        if (legacyModifiedFileList?.filePaths) {
+            console.log('[LanguageServer] legacyAddChatResponse - populating modified files', {
+                tabId,
+                filePaths: legacyModifiedFileList.filePaths,
+                isPartialResult,
+                location: chatResult.fileList ? 'root' : 'header',
+            })
+            legacyModifiedFileList.filePaths.forEach(filePath => {
+                mynahUi.addModifiedFile(tabId, filePath)
+            })
+            mynahUi.setModifiedFilesWorkInProgress(tabId, isPartialResult)
+        } else {
+            console.log('[LanguageServer] legacyAddChatResponse - no fileList found', {
+                tabId,
+                hasRootFileList: !!chatResult.fileList,
+                hasHeaderFileList: !!chatResult.header?.fileList,
+            })
+        }
 
         if (chatResult.contextList !== undefined) {
             header = {
