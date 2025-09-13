@@ -564,6 +564,24 @@ export const createMynahUi = (
                 })
             } else if (action.id === OPEN_WORKSPACE_INDEX_SETTINGS_BUTTON_ID) {
                 messager.onOpenSettings('amazonQ.workspaceIndex')
+            } else if (action.id === 'undo-changes') {
+                // Handle individual file undo - let the existing system handle it
+                console.log('[MynahUI] Undo changes button clicked for messageId:', messageId)
+                const payload: ButtonClickParams = {
+                    tabId,
+                    messageId,
+                    buttonId: action.id,
+                }
+                messager.onButtonClick(payload)
+            } else if (action.id === 'undo-all-changes') {
+                // Handle undo all files - let the existing system handle it
+                console.log('[MynahUI] Undo all changes button clicked for messageId:', messageId)
+                const payload: ButtonClickParams = {
+                    tabId,
+                    messageId,
+                    buttonId: action.id,
+                }
+                messager.onButtonClick(payload)
             } else {
                 const payload: ButtonClickParams = {
                     tabId,
@@ -815,6 +833,7 @@ export const createMynahUi = (
             }
         },
         onModifiedFileClick: (tabId: string, filePath: string, eventId?: string) => {
+            console.log('[MynahUI] onModifiedFileClick called:', { tabId, filePath, eventId })
             messager.onFileClick({ tabId, filePath, messageId: undefined })
         },
     }
@@ -972,8 +991,29 @@ export const createMynahUi = (
                 location: chatResult.fileList ? 'root' : 'header',
             })
             modifiedFileList.filePaths.forEach(filePath => {
-                mynahUi.addModifiedFile(tabId, filePath)
+                // Detect file type based on file details
+                const fileDetails = modifiedFileList.details?.[filePath]
+                const isNewFile = fileDetails?.changes?.added && !fileDetails?.changes?.deleted
+                const fileType = isNewFile ? 'created' : 'modified'
+
+                // Use enhanced API with file type
+                if (mynahUi.addFile) {
+                    mynahUi.addFile(tabId, filePath, fileType)
+                } else {
+                    // Fallback to legacy API
+                    mynahUi.addModifiedFile(tabId, filePath)
+                }
             })
+
+            // Handle deleted files if present
+            if (modifiedFileList.deletedFiles) {
+                modifiedFileList.deletedFiles.forEach(filePath => {
+                    if (mynahUi.addFile) {
+                        mynahUi.addFile(tabId, filePath, 'deleted')
+                    }
+                })
+            }
+
             mynahUi.setModifiedFilesWorkInProgress(tabId, isPartialResult)
         } else {
             console.log('[LanguageServer] agenticAddChatResponse - no fileList found', {
@@ -1006,8 +1046,28 @@ export const createMynahUi = (
                         location: am.fileList ? 'root' : 'header',
                     })
                     amModifiedFileList.filePaths.forEach(filePath => {
-                        mynahUi.addModifiedFile(tabId, filePath)
+                        // Detect file type based on file details
+                        const fileDetails = amModifiedFileList.details?.[filePath]
+                        const isNewFile = fileDetails?.changes?.added && !fileDetails?.changes?.deleted
+                        const fileType = isNewFile ? 'created' : 'modified'
+
+                        // Use enhanced API with file type
+                        if (mynahUi.addFile) {
+                            mynahUi.addFile(tabId, filePath, fileType)
+                        } else {
+                            // Fallback to legacy API
+                            mynahUi.addModifiedFile(tabId, filePath)
+                        }
                     })
+
+                    // Handle deleted files if present
+                    if (amModifiedFileList.deletedFiles) {
+                        amModifiedFileList.deletedFiles.forEach(filePath => {
+                            if (mynahUi.addFile) {
+                                mynahUi.addFile(tabId, filePath, 'deleted')
+                            }
+                        })
+                    }
                 }
 
                 const chatItem: ChatItem = {
