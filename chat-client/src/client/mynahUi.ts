@@ -998,7 +998,8 @@ export const createMynahUi = (
 
                 // Use enhanced API with file type
                 if (mynahUi.addFile) {
-                    mynahUi.addFile(tabId, filePath, fileType)
+                    const fullPath = fileDetails?.fullPath || filePath
+                    mynahUi.addFile(tabId, filePath, fileType, fullPath)
                 } else {
                     // Fallback to legacy API
                     mynahUi.addModifiedFile(tabId, filePath)
@@ -1012,6 +1013,11 @@ export const createMynahUi = (
                         mynahUi.addFile(tabId, filePath, 'deleted')
                     }
                 })
+            }
+
+            // Set messageId for diff mode functionality
+            if (chatResult.messageId && mynahUi.setMessageId) {
+                mynahUi.setMessageId(tabId, chatResult.messageId)
             }
 
             mynahUi.setModifiedFilesWorkInProgress(tabId, isPartialResult)
@@ -1053,7 +1059,8 @@ export const createMynahUi = (
 
                         // Use enhanced API with file type
                         if (mynahUi.addFile) {
-                            mynahUi.addFile(tabId, filePath, fileType)
+                            const fullPath = fileDetails?.fullPath || filePath
+                            mynahUi.addFile(tabId, filePath, fileType, fullPath)
                         } else {
                             // Fallback to legacy API
                             mynahUi.addModifiedFile(tabId, filePath)
@@ -1067,6 +1074,11 @@ export const createMynahUi = (
                                 mynahUi.addFile(tabId, filePath, 'deleted')
                             }
                         })
+                    }
+
+                    // Set messageId for additional messages too
+                    if (am.messageId && mynahUi.setMessageId) {
+                        mynahUi.setMessageId(tabId, am.messageId)
                     }
                 }
 

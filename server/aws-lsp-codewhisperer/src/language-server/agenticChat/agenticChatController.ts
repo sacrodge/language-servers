@@ -467,15 +467,34 @@ export class AgenticChatController implements ChatHandlers {
         this.#log(`Reverting file change for tooluseId: ${toolUseId}`)
         const toolUse = session?.toolUseLookup.get(toolUseId)
 
-        const input = toolUse?.input as unknown as FsWriteParams | FsReplaceParams
-        if (toolUse?.fileChange?.before) {
-            await this.#features.workspace.fs.writeFile(input.path, toolUse.fileChange.before)
-        } else {
-            await this.#features.workspace.fs.rm(input.path)
-            void LocalProjectContextController.getInstance().then(controller => {
-                const filePath = URI.file(input.path).fsPath
-                return controller.updateIndexAndContextCommand([filePath], false)
-            })
+        if (!toolUse || !toolUse.input) {
+            this.#log(`Cannot undo file change: toolUse or input not found for ${toolUseId}`)
+            return
+        }
+
+        const input = toolUse.input as unknown as FsWriteParams | FsReplaceParams
+        if (!input.path) {
+            this.#log(`Cannot undo file change: path not found in input for ${toolUseId}`)
+            return
+        }
+
+        try {
+            if (toolUse.fileChange?.before) {
+                this.#log(`Restoring file content for: ${input.path}`)
+                await this.#features.workspace.fs.writeFile(input.path, toolUse.fileChange.before)
+                this.#log(`Successfully restored file: ${input.path}`)
+            } else {
+                this.#log(`Deleting newly created file: ${input.path}`)
+                await this.#features.workspace.fs.rm(input.path)
+                this.#log(`Successfully deleted file: ${input.path}`)
+                void LocalProjectContextController.getInstance().then(controller => {
+                    const filePath = URI.file(input.path).fsPath
+                    return controller.updateIndexAndContextCommand([filePath], false)
+                })
+            }
+        } catch (error) {
+            this.#log(`Error during undo operation for ${input.path}: ${error}`)
+            throw error
         }
     }
 
