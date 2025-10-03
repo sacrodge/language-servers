@@ -304,13 +304,11 @@ const initializeChatResponse = (mynahUi: MynahUI, tabId: string, userPrompt?: st
             loadingChat: true,
             cancelButtonWhenLoading: true,
             promptInputDisabledState: false,
-            modifiedFilesVisible: true,
         })
     } else {
         mynahUi.updateStore(tabId, {
             loadingChat: true,
             promptInputDisabledState: true,
-            modifiedFilesVisible: true,
         })
     }
 
@@ -401,20 +399,6 @@ export const createMynahUi = (
         },
         onFileClick: (tabId, filePath, deleted, messageId, eventId, fileDetails) => {
             messager.onFileClick({ tabId, filePath, messageId, fullPath: fileDetails?.data?.['fullPath'] })
-        },
-        onFileActionClick: (tabId, messageId, filePath, actionName, eventId) => {
-            // For undo buttons, extract the tool use ID from the action name
-            let actualMessageId = messageId
-            if (actionName.startsWith('undo-changes-') && actionName !== 'undo-changes') {
-                actualMessageId = actionName.replace('undo-changes-', '')
-            }
-
-            const payload: ButtonClickParams = {
-                tabId,
-                messageId: actualMessageId,
-                buttonId: actionName,
-            }
-            messager.onButtonClick(payload)
         },
         onTabAdd: (tabId: string) => {
             const defaultTabBarData = tabFactory.getDefaultTabData()
@@ -833,15 +817,11 @@ export const createMynahUi = (
                 store: {
                     ...tabFactory.createTab(disclaimerCardActive),
                     chatItems: tabFactory.getChatItems(true, programmingModeCardActive),
-                    modifiedFilesVisible: false,
                 },
             },
         },
         defaults: {
-            store: {
-                ...tabFactory.createTab(false),
-                modifiedFilesVisible: false,
-            },
+            store: tabFactory.createTab(false),
         },
         config: {
             maxTabs: 10,
@@ -889,7 +869,6 @@ export const createMynahUi = (
         const tabId = mynahUi.updateStore('', {
             ...tabFactory.createTab(disclaimerCardActive),
             tabMetadata: { openTabKey: openTab ? true : false },
-            modifiedFilesVisible: false,
         })
         if (tabId === undefined) {
             mynahUi.notify({
@@ -936,7 +915,7 @@ export const createMynahUi = (
                             description: fileDetails.description,
                             clickable: true,
                             data: {
-                                fullPath: fileDetails.fullPath || fileDetails.description || '',
+                                fullPath: fileDetails.fullPath || '',
                             },
                         },
                     ])
@@ -957,40 +936,6 @@ export const createMynahUi = (
                 ?.getStore()
                 ?.promptTopBarContextItems?.filter(cm => cm.label === 'image').length || 0
         return imageContextInPrompt + imageContextInPin
-    }
-
-    const processUndoButtonsToFileActions = (
-        undoButtons: Array<{ id: string; text?: string; messageId?: string }>,
-        filePaths: string[],
-        messageId?: string
-    ) => {
-        const fileActions: Record<
-            string,
-            Array<{ name: string; label: string; icon: string; status: string; messageId?: string }>
-        > = {}
-
-        for (const button of undoButtons) {
-            if (button.id && button.id.startsWith('undo-changes-') && button.id !== 'undo-all-changes') {
-                const match = button.text?.match(/Undo (.+)$/)
-                if (match) {
-                    const fileName = match[1]
-                    const filePath = filePaths.find(path => path.endsWith(fileName))
-                    if (filePath) {
-                        fileActions[filePath] = [
-                            {
-                                name: button.id,
-                                label: `Undo ${fileName}`,
-                                icon: 'undo',
-                                status: 'clear',
-                                messageId: button.messageId || messageId,
-                            },
-                        ]
-                    }
-                }
-            }
-        }
-
-        return fileActions
     }
 
     const addChatResponse = (chatResult: ChatResult, tabId: string, isPartialResult: boolean) => {
@@ -1306,84 +1251,19 @@ export const createMynahUi = (
     }
 
     const updateChat = (params: ChatUpdateParams) => {
-        console.log(
-            '[MynahUI] updateChat called with params:',
-            JSON.stringify(
-                {
-                    tabId: params.tabId,
-                    hasModifiedFiles: !!(params as any).modifiedFiles,
-                    hasPaidTierMode: !!(params as any).paidTierMode,
-                    hasData: !!params.data,
-                    hasState: !!params.state,
-                },
-                null,
-                2
-            )
-        )
-
         // HACK: Special field sent by `agenticChatController.ts:setPaidTierMode()`.
         if (onPaidTierModeChange(params.tabId, (params as any).paidTierMode as string)) {
             return
         }
 
-        // Handle modified files updates from AgenticChatController
-        if ((params as any).modifiedFiles) {
-            const modifiedFilesData = (params as any).modifiedFiles
-            console.log(
-                '[MynahUI] updateChat - Processing modified files:',
-                JSON.stringify(
-                    {
-                        tabId: params.tabId,
-                        hasFileList: !!modifiedFilesData.fileList,
-                        title: modifiedFilesData.title,
-                        visible: modifiedFilesData.visible,
-                        undoButtons:
-                            modifiedFilesData.fileList?.undoButtons?.map((b: any) => ({ id: b.id, text: b.text })) ||
-                            [],
-                    },
-                    null,
-                    2
-                )
-            )
-
-            const modifiedFilesList = modifiedFilesData.fileList
-                ? {
-                      ...modifiedFilesData.fileList,
-                      buttons:
-                          modifiedFilesData.fileList.undoButtons?.filter((b: any) => b.id === 'undo-all-changes') || [],
-                      actions: processUndoButtonsToFileActions(
-                          modifiedFilesData.fileList.undoButtons || [],
-                          modifiedFilesData.fileList.filePaths || [],
-                          modifiedFilesData.fileList.messageId
-                      ),
-                  }
-                : null
-
-            console.log(
-                '[MynahUI] updateChat - Created modifiedFilesList:',
-                JSON.stringify(
-                    {
-                        hasModifiedFilesList: !!modifiedFilesList,
-                        buttonsCount: modifiedFilesList?.buttons?.length || 0,
-                        buttons: modifiedFilesList?.buttons?.map((b: any) => ({ id: b.id, text: b.text })) || [],
-                    },
-                    null,
-                    2
-                )
-            )
-
+        // HACK: Special field sent by `agenticChatController.ts` for modified files tracking.
+        if ((params as any).modifiedFilesList !== undefined) {
             mynahUi.updateStore(params.tabId, {
-                modifiedFilesList,
-                modifiedFilesTitle: modifiedFilesData.title,
-                modifiedFilesVisible: modifiedFilesData.visible,
+                modifiedFilesList: (params as any).modifiedFilesList,
             })
-
-            console.log('[MynahUI] updateChat - Updated store with modified files data')
-            return
         }
 
         const isChatLoading = params.state?.inProgress
-        console.log('[MynahUI] updateChat - Setting loading state:', { isChatLoading, agenticMode })
         mynahUi.updateStore(params.tabId, {
             loadingChat: isChatLoading,
             cancelButtonWhenLoading: agenticMode,
@@ -1945,9 +1825,6 @@ export const uiComponentsTexts = {
     spinnerText: 'Working...',
     macStopButtonShortcut: '&#8679; &#8984; &#9003;',
     windowStopButtonShortcut: 'Ctrl + &#8679; + &#9003;',
-    modifiedFilesWorking: 'Working...',
-    modifiedFilesNone: 'No files modified!',
-    modifiedFilesCount: '({count}) files modified!',
 }
 
 const getStopGeneratingToolTipText = (os: string | undefined, agenticMode: boolean | undefined): string => {
