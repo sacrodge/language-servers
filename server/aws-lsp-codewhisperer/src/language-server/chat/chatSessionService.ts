@@ -329,6 +329,13 @@ export class ChatSessionService {
     }
 
     /**
+     * Gets the current prompt ID
+     */
+    public getCurrentPromptId(): string | undefined {
+        return this.#currentPromptId
+    }
+
+    /**
      * Checks if the given prompt ID matches the current one
      * @param promptId The prompt ID to check
      * @returns True if the given prompt ID matches the current one

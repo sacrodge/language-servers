@@ -230,6 +230,7 @@ import { CodeWhispererServiceToken } from '../../shared/codeWhispererService'
 import { DisplayFindings } from './tools/qCodeAnalysis/displayFindings'
 import { IDE } from '../../shared/constants'
 import { IdleWorkspaceManager } from '../workspaceContext/IdleWorkspaceManager'
+import { PromptId } from 'aws-sdk/clients/connect'
 
 type ChatHandlers = Omit<
     LspHandlers<Chat>,
@@ -292,6 +293,9 @@ export class AgenticChatController implements ChatHandlers {
           }
         | undefined
 
+    // for modifiedFilesTracker component
+    #modifiedFilesRecord: Record<string, Record<string, ChatMessage>> = {}
+
     /**
      * Determines the appropriate message ID for a tool use based on tool type and name
      * @param toolType The type of tool being used
@@ -339,8 +343,12 @@ export class AgenticChatController implements ChatHandlers {
         chatSessionManagementService: ChatSessionManagementService,
         features: Features,
         telemetryService: TelemetryService,
-        serviceManager?: AmazonQBaseServiceManager
+        serviceManager?: AmazonQBaseServiceManager,
+        // keep track of each chatMessage sent to modifiedFilestracker
+        // primary key is promptId and secondary key is messageId
+        modifiedFilesRecord: Record<string, Record<string, ChatMessage>> = {}
     ) {
+        this.#modifiedFilesRecord = modifiedFilesRecord
         this.#features = features
         this.#chatSessionManagementService = chatSessionManagementService
         this.#triggerContext = new AgenticChatTriggerContext(features)
@@ -522,6 +530,75 @@ export class AgenticChatController implements ChatHandlers {
                 messages: [
                     {
                         ...cachedToolUse.chatResult,
+                        header: updatedHeader,
+                    },
+                ],
+            },
+        })
+        // update the modified-files-tracker component as well
+        this.#modifiedFilesUpdateUndoButtonAfterClick(tabId, toolUseId, session)
+    }
+
+    // Update undo button after click for modified-files-tracker component
+    #modifiedFilesUpdateUndoButtonAfterClick(
+        tabId: string,
+        toolUseId: string,
+        session: ChatSessionService | undefined
+    ) {
+        const cachedToolUse = session?.toolUseLookup.get(toolUseId)
+        if (!cachedToolUse) {
+            return
+        }
+        // Considering only the current prompt chatMessages are saved
+        const modifiedFilesChatMessages = Object.values(this.#modifiedFilesRecord)[0]
+        const currMessageId = 'modified-files-' + toolUseId
+
+        // return if the undo button from previous prompts was clicked
+        if (!modifiedFilesChatMessages[currMessageId]) {
+            this.#log(`No chat message found for ${currMessageId}`)
+            return
+        }
+
+        const fileList = modifiedFilesChatMessages[currMessageId].header?.fileList
+        const button = modifiedFilesChatMessages[currMessageId].header?.buttons?.filter(
+            button => button.id !== BUTTON_UNDO_CHANGES
+        )
+
+        const updatedHeader = {
+            ...modifiedFilesChatMessages[currMessageId].header,
+            buttons: button,
+            status: {
+                status: 'error' as const,
+                icon: 'cancel',
+                text: 'Change discarded',
+            },
+            muted: true,
+        }
+
+        if (fileList && fileList.filePaths && fileList.details) {
+            const updatedFileList = {
+                ...fileList,
+                muted: true,
+            }
+            const updatedDetails = { ...fileList.details }
+            for (const filePath of fileList.filePaths) {
+                if (updatedDetails[filePath]) {
+                    ;(updatedDetails[filePath] as any) = {
+                        ...updatedDetails[filePath],
+                        clickable: false,
+                    } as Partial<FileDetails>
+                }
+            }
+            updatedFileList.details = updatedDetails
+            updatedHeader.fileList = updatedFileList
+        }
+
+        this.#features.chat.sendChatUpdate({
+            tabId,
+            data: {
+                messages: [
+                    {
+                        ...modifiedFilesChatMessages[currMessageId],
                         header: updatedHeader,
                     },
                 ],
@@ -973,6 +1050,11 @@ export class AgenticChatController implements ChatHandlers {
                 // Generate a unique ID for this prompt
                 const promptId = crypto.randomUUID()
                 session.setCurrentPromptId(promptId)
+
+                // reset modifiedFilesTrakcer logic would go here
+                this.#modifiedFilesRecord = {}
+                // for now, fill up the new data structure modifiedFilesRecord
+                this.#modifiedFilesRecord[promptId] = {}
 
                 // Start the agent loop
                 finalResult = await this.#runAgentLoop(
@@ -2062,12 +2144,26 @@ export class AgenticChatController implements ChatHandlers {
                         // document receives focus.
                         const doc = await this.#triggerContext.getTextDocumentFromPath(input.path, false, true)
                         const chatResult = await this.#getFsWriteChatResult(toolUse, doc, session)
+
                         // Send modified files data to ModifiedFilesTracker
                         const modifiedFilesChatResult = await this.#getModifiedFilesDataChatResult(
                             toolUse,
                             doc,
                             session
                         )
+                        // Store the chatMessages to the modifiedfilesrecord, serves as cache
+                        const currPromptId = session.getCurrentPromptId()
+                        if (currPromptId) {
+                            if (!this.#modifiedFilesRecord[currPromptId]) {
+                                this.#modifiedFilesRecord[currPromptId] = {}
+                            }
+                            if (!modifiedFilesChatResult.messageId) {
+                                modifiedFilesChatResult.messageId = 'modified-files-' + toolUse.toolUseId
+                            }
+                            this.#modifiedFilesRecord[currPromptId][modifiedFilesChatResult.messageId] =
+                                modifiedFilesChatResult
+                        }
+
                         const cachedToolUse = session.toolUseLookup.get(toolUse.toolUseId)
                         if (cachedToolUse) {
                             session.toolUseLookup.set(toolUse.toolUseId, {
