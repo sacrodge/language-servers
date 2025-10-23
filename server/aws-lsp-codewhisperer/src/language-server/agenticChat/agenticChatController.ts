@@ -2062,12 +2062,6 @@ export class AgenticChatController implements ChatHandlers {
                         // document receives focus.
                         const doc = await this.#triggerContext.getTextDocumentFromPath(input.path, false, true)
                         const chatResult = await this.#getFsWriteChatResult(toolUse, doc, session)
-                        // Send modified files data to ModifiedFilesTracker
-                        const modifiedFilesChatResult = await this.#getModifiedFilesDataChatResult(
-                            toolUse,
-                            doc,
-                            session
-                        )
                         const cachedToolUse = session.toolUseLookup.get(toolUse.toolUseId)
                         if (cachedToolUse) {
                             session.toolUseLookup.set(toolUse.toolUseId, {
@@ -2096,8 +2090,9 @@ export class AgenticChatController implements ChatHandlers {
                             acceptedLineCount
                         )
                         await chatResultStream.writeResultBlock(chatResult)
-                        // write the modified files chat result to stream
-                        await chatResultStream.writeResultBlock(modifiedFilesChatResult)
+
+                        // Send modified files data to ModifiedFilesTracker
+                        await this.#getModifiedFilesDataChatResult(toolUse, doc, session, chatResultStream)
                         break
                     case CodeReview.toolName:
                         // no need to write tool result for code review, this is handled by model via chat
@@ -2394,20 +2389,6 @@ export class AgenticChatController implements ChatHandlers {
         await chatResultStream.writeResultBlock({
             type: 'answer',
             messageId: `${session.currentUndoAllId}${SUFFIX_UNDOALL}`,
-            buttons: [
-                {
-                    id: BUTTON_UNDO_ALL_CHANGES,
-                    text: 'Undo all changes',
-                    icon: 'undo',
-                    status: 'clear',
-                    keepCardAfterClick: false,
-                },
-            ],
-        })
-        // provide the same undoAll button but with 'modified-files-' messageId prefix
-        await chatResultStream.writeResultBlock({
-            type: 'answer',
-            messageId: `modified-files-${session.currentUndoAllId}${SUFFIX_UNDOALL}`,
             buttons: [
                 {
                     id: BUTTON_UNDO_ALL_CHANGES,
@@ -3076,39 +3057,47 @@ export class AgenticChatController implements ChatHandlers {
     async #getModifiedFilesDataChatResult(
         toolUse: ToolUse,
         doc: TextDocument | undefined,
-        session: ChatSessionService
-    ): Promise<ChatMessage> {
+        session: ChatSessionService,
+        chatResultStream: AgenticChatResultStream
+    ): Promise<void> {
         const input = toolUse.input as unknown as FsWriteParams | FsReplaceParams
-        const oldContent = session.toolUseLookup.get(toolUse.toolUseId!)?.fileChange?.before ?? ''
-        // Get just the filename instead of the full path
         const fileName = path.basename(input.path)
-        const diffChanges = diffLines(oldContent, doc?.getText() ?? '')
-        const changes = diffChanges.reduce(
-            (acc, { count = 0, added, removed }) => {
-                if (added) {
-                    acc.added += count
-                } else if (removed) {
-                    acc.deleted += count
-                }
-                return acc
-            },
-            { added: 0, deleted: 0 }
-        )
-        return {
-            type: 'tool',
-            messageId: 'modified-files-' + toolUse.toolUseId,
-            header: {
-                fileList: {
-                    filePaths: [fileName],
-                    details: {
-                        [fileName]: {
-                            changes,
-                            description: input.path,
+        const cachedToolUse = session.toolUseLookup.get(toolUse.toolUseId!)
+
+        if (cachedToolUse?.fileChange?.before !== undefined) {
+            const oldContent = cachedToolUse.fileChange.before
+            const newContent = doc?.getText() ?? ''
+
+            const diffChanges = diffLines(oldContent, newContent)
+            const changes = diffChanges.reduce(
+                (acc, { count = 0, added, removed }) => {
+                    if (added) {
+                        acc.added += count
+                    } else if (removed) {
+                        acc.deleted += count
+                    }
+                    return acc
+                },
+                { added: 0, deleted: 0 }
+            )
+
+            const modifiedFilesMessage: ChatMessage = {
+                type: 'tool',
+                messageId: `modified-files-${toolUse.toolUseId}`,
+                header: {
+                    fileList: {
+                        filePaths: [fileName],
+                        details: {
+                            [fileName]: {
+                                changes,
+                                description: input.path,
+                            },
                         },
                     },
                 },
-                buttons: [{ id: BUTTON_UNDO_CHANGES, text: 'Undo', icon: 'undo' }],
-            },
+            }
+
+            await chatResultStream.writeResultBlock(modifiedFilesMessage)
         }
     }
 
