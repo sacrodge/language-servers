@@ -1424,6 +1424,7 @@ export const createMynahUi = (
                       ? { 'insert-to-cursor': null }
                       : undefined,
             ...(shouldMute ? { muted: true } : {}),
+            ...(message.forModifiedFilesTracker ? { forModifiedFilesTracker: message.forModifiedFilesTracker } : {}),
         }
     }
 
