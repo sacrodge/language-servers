@@ -487,6 +487,11 @@ export class AgenticChatController implements ChatHandlers {
         const fileList = cachedToolUse.chatResult?.header?.fileList
         const button = cachedToolUse.chatResult?.header?.buttons?.filter(button => button.id !== BUTTON_UNDO_CHANGES)
 
+        const updatedForModifiedFilesTracker = {
+            ...cachedToolUse.chatResult?.forModifiedFilesTracker,
+            removeFile: true,
+        }
+
         const updatedHeader = {
             ...cachedToolUse.chatResult?.header,
             buttons: button,
@@ -523,6 +528,7 @@ export class AgenticChatController implements ChatHandlers {
                     {
                         ...cachedToolUse.chatResult,
                         header: updatedHeader,
+                        forModifiedFilesTracker: updatedForModifiedFilesTracker,
                     },
                 ],
             },
