@@ -2402,7 +2402,7 @@ export class AgenticChatController implements ChatHandlers {
                 },
             ],
             forModifiedFilesTracker: {
-                isVisible: true,
+                title: 'Following files were modified : ',
             },
         })
         session.currentUndoAllId = undefined
@@ -3055,8 +3055,7 @@ export class AgenticChatController implements ChatHandlers {
                 buttons: [{ id: BUTTON_UNDO_CHANGES, text: 'Undo', icon: 'undo' }],
             },
             forModifiedFilesTracker: {
-                title: 'Following files were modified:',
-                isVisible: true,
+                title: 'Following files were modified : ',
             },
         }
     }
