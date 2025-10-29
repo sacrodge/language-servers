@@ -398,6 +398,7 @@ export const createMynahUi = (
             messager.onListAvailableModels({ tabId: tabFactory.initialTabId })
         },
         onFileClick: (tabId, filePath, deleted, messageId, eventId, fileDetails) => {
+            console.log(`[MynahUI] File clicked: ${filePath}, messageId: ${messageId}, tabId: ${tabId}`)
             messager.onFileClick({ tabId, filePath, messageId, fullPath: fileDetails?.data?.['fullPath'] })
         },
         onTabAdd: (tabId: string) => {
@@ -545,6 +546,7 @@ export const createMynahUi = (
             messager.onInfoLinkClick(payload)
         },
         onInBodyButtonClicked: (tabId, messageId, action, eventId) => {
+            console.log(`[MynahUI] Button clicked: ${action.id}, messageId: ${messageId}, tabId: ${tabId}`)
             if (action.id === disclaimerAcknowledgeButtonId) {
                 // Hide the legal disclaimer card
                 disclaimerCardActive = false
@@ -559,6 +561,7 @@ export const createMynahUi = (
             } else if (action.id === OPEN_WORKSPACE_INDEX_SETTINGS_BUTTON_ID) {
                 messager.onOpenSettings('amazonQ.workspaceIndex')
             } else {
+                console.log(`[MynahUI] Sending button click to server: ${action.id}`)
                 const payload: ButtonClickParams = {
                     tabId,
                     messageId,
@@ -939,6 +942,9 @@ export const createMynahUi = (
     }
 
     const addChatResponse = (chatResult: ChatResult, tabId: string, isPartialResult: boolean) => {
+        console.log(
+            `[MynahUI] Adding chat response: messageId=${chatResult.messageId}, tabId=${tabId}, isPartial=${isPartialResult}, hasFileList=${!!chatResult.fileList}, hasButtons=${!!chatResult.buttons}, forModifiedFilesTracker=${JSON.stringify(chatResult.forModifiedFilesTracker)}`
+        )
         if (agenticMode) {
             agenticAddChatResponse(chatResult, tabId, isPartialResult)
         } else {

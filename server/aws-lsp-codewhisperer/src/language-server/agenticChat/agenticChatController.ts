@@ -385,7 +385,10 @@ export class AgenticChatController implements ChatHandlers {
     }
 
     async onButtonClick(params: ButtonClickParams): Promise<ButtonClickResult> {
-        this.#log(`onButtonClick event with params: ${JSON.stringify(params)}`)
+        this.#log(`[AgenticChat] onButtonClick event with params: ${JSON.stringify(params)}`)
+        console.log(
+            `[AgenticChat] Button click received: ${params.buttonId}, messageId: ${params.messageId}, tabId: ${params.tabId}`
+        )
         const session = this.#chatSessionManagementService.getSession(params.tabId)
         if (
             params.buttonId === BUTTON_RUN_SHELL_COMMAND ||
@@ -420,8 +423,10 @@ export class AgenticChatController implements ChatHandlers {
             }
         } else if (params.buttonId === BUTTON_UNDO_CHANGES) {
             const toolUseId = params.messageId
+            console.log(`[AgenticChat] Processing undo changes for toolUseId: ${toolUseId}`)
             try {
                 await this.#undoFileChange(toolUseId, session.data)
+                console.log(`[AgenticChat] Updating undo button after click for toolUseId: ${toolUseId}`)
                 this.#updateUndoButtonAfterClick(params.tabId, toolUseId, session.data)
                 this.#telemetryController.emitInteractWithAgenticChat(
                     'RejectDiff',
@@ -439,6 +444,7 @@ export class AgenticChatController implements ChatHandlers {
             }
         } else if (params.buttonId === BUTTON_UNDO_ALL_CHANGES) {
             const toolUseId = params.messageId.replace(SUFFIX_UNDOALL, '')
+            console.log(`[AgenticChat] Processing undo all changes for toolUseId: ${toolUseId}`)
             await this.#undoAllFileChanges(params.tabId, toolUseId, session.data)
             return {
                 success: true,
@@ -480,8 +486,10 @@ export class AgenticChatController implements ChatHandlers {
     }
 
     #updateUndoButtonAfterClick(tabId: string, toolUseId: string, session: ChatSessionService | undefined) {
+        console.log(`[AgenticChat] Updating undo button after click for toolUseId: ${toolUseId}`)
         const cachedToolUse = session?.toolUseLookup.get(toolUseId)
         if (!cachedToolUse) {
+            console.log(`[AgenticChat] No cached tool use found for toolUseId: ${toolUseId}`)
             return
         }
         const fileList = cachedToolUse.chatResult?.header?.fileList
@@ -491,6 +499,9 @@ export class AgenticChatController implements ChatHandlers {
             ...cachedToolUse.chatResult?.forModifiedFilesTracker,
             removeFile: true,
         }
+        console.log(
+            `[AgenticChat] Sending chat update with forModifiedFilesTracker: ${JSON.stringify(updatedForModifiedFilesTracker)}`
+        )
 
         const updatedHeader = {
             ...cachedToolUse.chatResult?.header,
