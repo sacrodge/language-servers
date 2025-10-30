@@ -385,7 +385,7 @@ export class AgenticChatController implements ChatHandlers {
     }
 
     async onButtonClick(params: ButtonClickParams): Promise<ButtonClickResult> {
-        this.#log(`[AgenticChat] onButtonClick event with params: ${JSON.stringify(params)}`)
+        this.#log(`onButtonClick event with params: ${JSON.stringify(params)}`)
         const session = this.#chatSessionManagementService.getSession(params.tabId)
         if (
             params.buttonId === BUTTON_RUN_SHELL_COMMAND ||
